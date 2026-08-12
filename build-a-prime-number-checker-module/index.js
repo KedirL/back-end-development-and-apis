@@ -17,4 +17,5 @@ module.exports ={
     isPrime:isPrime
 }
 
-isPrime(19);
+console.log(isPrime(19))
+console.log(isPrime(24))

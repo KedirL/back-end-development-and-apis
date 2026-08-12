@@ -9,7 +9,8 @@
     "check"
   ],
   "scripts": {
-    "test": "node test.index.js"
+    "test": "node index.js",
+    "start": "node index.js"
   },
   "license": "MIT",
   "author": "Kedir Lemecha",
