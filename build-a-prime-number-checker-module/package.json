@@ -1,0 +1,16 @@
+{
+  "name": "build-a-prime-number-checker-module",
+  "version": "1.0.0",
+  "description": "This a prime number checking module ",
+  "keywords": [
+    "prime",
+    "mathematics",
+    "number",
+    "check"
+  ],
+  "license": "MIT",
+  "author": "Kedir Lemecha",
+  "type": "commonjs",
+  "main": "index.js"
+  
+}
