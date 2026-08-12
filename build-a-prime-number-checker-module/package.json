@@ -8,6 +8,9 @@
     "number",
     "check"
   ],
+  "scripts": {
+    "test": "node test.index.js"
+  },
   "license": "MIT",
   "author": "Kedir Lemecha",
   "type": "commonjs",
