@@ -434,17 +434,31 @@ Restart your server by stopping it with `Ctrl + C` and then running `node server
 You should restart the server.
 
 ```js
+// The server does not respond yet, so abort the request instead of waiting
+const controller = new AbortController();
+const timeout = setTimeout(() => controller.abort(), 500);
 try {
-  fetch("http://localhost:3001");
-  // Server does not respond, so catch the error
-} catch (_e) {}
+  await fetch("http://localhost:3001", { signal: controller.signal });
+} catch (_e) {
+} finally {
+  clearTimeout(timeout);
+}
 await new Promise((resolve) => {
   setTimeout(() => {
     resolve();
-  }, 50);
+  }, 500);
 });
 const temp = await __helpers.getTemp();
-assert.include(temp, "IncomingMessage {");
+assert.notInclude(
+  temp,
+  "IncomingMessage {",
+  "Your server is still logging the whole request object. You should restart it, so it uses your new code",
+);
+assert.include(
+  temp,
+  "host:",
+  "Your server should be running, and logging the request headers",
+);
 ```
 
 ## 16
@@ -459,6 +473,7 @@ You should run `curl --max-time 2 http://localhost:3001` in the terminal.
 
 ```js
 const lastCommand = await __helpers.getLastCommand();
+assert.exists(lastCommand, "a command should be input");
 const [command, ...args] = __helpers.parseCli(lastCommand);
 assert.equal(command, "curl");
 assert.include(args, "http://localhost:3001");
@@ -516,8 +531,15 @@ Restart your server by stopping it with `Ctrl + C` and then running `node server
 You should restart the server, and make a request to it.
 
 ```js
-const temp = await __helpers.getTemp();
-assert.include(temp, "curl http://localhost:3001/test-url");
+const lastCommand = await __helpers.getLastCommand();
+assert.exists(lastCommand, "a command should be input");
+const [command, ...args] = __helpers.parseCli(lastCommand);
+assert.equal(command, "curl", "You should use the curl command");
+assert.include(
+  args,
+  "http://localhost:3001/test-url",
+  "You should make a request to http://localhost:3001/test-url",
+);
 ```
 
 ### --seed--
@@ -694,77 +716,9 @@ assert.include(temp, "curl http://localhost:3001");
 
 ### --description--
 
-Looking back at your project file structure:
+To build the path to the file the client is requesting, you will use the `join` function from the `path` module.
 
-<details>
-  <summary>File Structure:</summary>
-
-```markdown
-public/
-├── index.html
-├── products.html
-├── about.html
-├── 404.html
-├── forrest1.png
-├── forrest2.png
-├── forrest3.png
-└── style.css
-package.json
-server.js
-```
-
-</details>
-
-You can see `public/` needs to be prepended to the `url` variable to get the correct file path. Whilst you could use string concatenation, it is better to use the `path` module's `join` function to join the directory with the `url` variable:
-
-```js
-const fullPath = path.join("first", "second", "third");
-console.log(fullPath); // first/second/third
-```
-
-Create a `filePath` variable, and assign it the value of joining `"public"` with `url`.
-
-### --tests--
-
-You should have `const filePath = join("public", url)` within the `createServer` callback function.
-
-```js
-const file = await __helpers.getFile(project.dashedName, "server.js");
-const t = new __helpers.Tower(file);
-const server = t.getVariable("server");
-const http_createServer = server.getCalls("http.createServer").at(0);
-const callback = http_createServer.ast.init.arguments[0];
-const cbTower = new __helpers.Tower(callback);
-const filePathVar = cbTower.getVariable("filePath");
-assert.match(
-  filePathVar.compact,
-  /^const filePath=(?:path\.)?join\("public",url\);$/,
-  'You should have `const filePath = join("public", url)` (or `path.join("public", url)`) within the createServer callback function.',
-);
-```
-
-### --seed--
-
-#### --"build-a-web-server/server.js"--
-
-```js
-const http = require("http");
-
-const server = http.createServer((request, response) => {
-  console.log(request.headers);
-  console.log(request.url);
-  const url = request.url === "/" ? "/index.html" : request.url;
-  response.end(url, "utf-8");
-});
-
-server.listen(3001);
-```
-
-## 25
-
-### --description--
-
-Import the `join` function from the `path` module.
+Import the `join` function from the `path` module at the top of `server.js`.
 
 ### --tests--
 
@@ -793,10 +747,101 @@ const http = require("http");
 const server = http.createServer((request, response) => {
   console.log(request.headers);
   console.log(request.url);
-  const { join } = require("path");
   const url = request.url === "/" ? "/index.html" : request.url;
   response.end(url, "utf-8");
-  const filePath = join("public", url);
+});
+
+server.listen(3001);
+```
+
+## 25
+
+### --description--
+
+Looking back at your project file structure:
+
+<details>
+  <summary>File Structure:</summary>
+
+```markdown
+public/
+├── index.html
+├── products.html
+├── about.html
+├── 404.html
+├── forrest1.png
+├── forrest2.png
+├── forrest3.png
+└── style.css
+package.json
+server.js
+```
+
+</details>
+
+You can see `public/` needs to be prepended to the `url` variable to get the correct file path. Whilst you could use string concatenation, it is better to use the `path` module's `join` function to join the directory with the `url` variable:
+
+```js
+const fullPath = path.join("first", "second", "third");
+console.log(fullPath); // first/second/third
+```
+
+Create a `filePath` variable, and assign it the value of joining `"public"` with `url`. Declare it before the `response.end` call.
+
+### --tests--
+
+You should have `const filePath = join("public", url)` within the `createServer` callback function.
+
+```js
+const file = await __helpers.getFile(project.dashedName, "server.js");
+const t = new __helpers.Tower(file);
+const server = t.getVariable("server");
+const http_createServer = server.getCalls("http.createServer").at(0);
+const callback = http_createServer.ast.init.arguments[0];
+const cbTower = new __helpers.Tower(callback);
+const filePathVar = cbTower.getVariable("filePath");
+assert.exists(
+  filePathVar,
+  'You should have `const filePath = join("public", url)` within the createServer callback function.',
+);
+assert.match(
+  filePathVar.compact,
+  /^const filePath=(?:path\.)?join\("public",url\);$/,
+  'You should have `const filePath = join("public", url)` (or `path.join("public", url)`) within the createServer callback function.',
+);
+```
+
+You should define `filePath` before calling `response.end`.
+
+```js
+const file = await __helpers.getFile(project.dashedName, "server.js");
+const t = new __helpers.Tower(file);
+const server = t.getVariable("server");
+const http_createServer = server.getCalls("http.createServer").at(0);
+const callback = http_createServer.ast.init.arguments[0];
+const cbTower = new __helpers.Tower(callback);
+const filePathVar = cbTower.getVariable("filePath");
+assert.exists(
+  filePathVar,
+  "You should have a `filePath` variable within the createServer callback function",
+);
+const ends = cbTower.getCalls("response.end");
+assert.isBelow(filePathVar.ast.start, ends.at(0).ast.start);
+```
+
+### --seed--
+
+#### --"build-a-web-server/server.js"--
+
+```js
+const http = require("http");
+const { join } = require("path");
+
+const server = http.createServer((request, response) => {
+  console.log(request.headers);
+  console.log(request.url);
+  const url = request.url === "/" ? "/index.html" : request.url;
+  response.end(url, "utf-8");
 });
 
 server.listen(3001);
@@ -833,6 +878,10 @@ const http_createServer = server.getCalls("http.createServer").at(0);
 const callback = http_createServer.ast.init.arguments[0];
 const cbTower = new __helpers.Tower(callback);
 const filePathVar = cbTower.getVariable("filePath");
+assert.exists(
+  filePathVar,
+  "You should have a `filePath` variable within the createServer callback function",
+);
 const ends = cbTower.getCalls("response.end");
 assert.isBelow(filePathVar.ast.start, ends.at(0).ast.start);
 ```
@@ -849,8 +898,8 @@ const server = http.createServer((request, response) => {
   console.log(request.headers);
   console.log(request.url);
   const url = request.url === "/" ? "/index.html" : request.url;
-  response.end(url, "utf-8");
   const filePath = join("public", url);
+  response.end(url, "utf-8");
 });
 
 server.listen(3001);
@@ -896,35 +945,9 @@ server.listen(3001);
 
 Whilst sending the file path to the client is fun, it is not what you want to do. You want to send the file itself.
 
-First, you need to read the file from the _file system_. Use the `readFile` function from the `fs` module, and pass the `filePath` variable as the first argument:
+To read the file from the _file system_, you will use the `readFile` function from the `fs` module.
 
-```js
-fs.readFile("relative/path/to/file");
-```
-
-### --tests--
-
-You should have `readFile(filePath)` within the `createServer` callback function.
-
-```js
-const file = await __helpers.getFile(project.dashedName, "server.js");
-const t = new __helpers.Tower(file);
-const server = t.getVariable("server");
-const http_createServer = server.getCalls("http.createServer").at(0);
-const callback = http_createServer.ast.init.arguments[0];
-const cbTower = new __helpers.Tower(callback);
-const readFiles = [
-  ...cbTower.getCalls("readFile"),
-  ...cbTower.getCalls("fs.readFile"),
-];
-assert.match(readFiles.at(0)?.compact, /^(?:fs\.)?readFile\(filePath\);$/);
-```
-
-## 29
-
-### --description--
-
-Import the `readFile` function from the `fs` module.
+Import the `readFile` function from the `fs` module at the top of `server.js`.
 
 ### --tests--
 
@@ -957,8 +980,58 @@ const server = http.createServer((request, response) => {
   const url = request.url === "/" ? "/index.html" : request.url;
   const filePath = join("public", url);
   response.end(filePath, "utf-8");
+});
 
-  readFile(filePath);
+server.listen(3001);
+```
+
+## 29
+
+### --description--
+
+Now, read the file from the file system. Call the `readFile` function, and pass the `filePath` variable as the first argument:
+
+```js
+readFile("relative/path/to/file");
+```
+
+### --tests--
+
+You should have `readFile(filePath)` within the `createServer` callback function.
+
+```js
+const file = await __helpers.getFile(project.dashedName, "server.js");
+const t = new __helpers.Tower(file);
+const server = t.getVariable("server");
+const http_createServer = server.getCalls("http.createServer").at(0);
+const callback = http_createServer.ast.init.arguments[0];
+const cbTower = new __helpers.Tower(callback);
+const readFiles = [
+  ...cbTower.getCalls("readFile"),
+  ...cbTower.getCalls("fs.readFile"),
+];
+assert.exists(
+  readFiles.at(0),
+  "You should call `readFile` within the createServer callback function",
+);
+assert.match(readFiles.at(0).compact, /^(?:fs\.)?readFile\(filePath\);$/);
+```
+
+### --seed--
+
+#### --"build-a-web-server/server.js"--
+
+```js
+const http = require("http");
+const { join } = require("path");
+const { readFile } = require("fs");
+
+const server = http.createServer((request, response) => {
+  console.log(request.headers);
+  console.log(request.url);
+  const url = request.url === "/" ? "/index.html" : request.url;
+  const filePath = join("public", url);
+  response.end(filePath, "utf-8");
 });
 
 server.listen(3001);
